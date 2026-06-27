@@ -2,14 +2,14 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { Coffee, Clock, Calendar, Utensils, CheckCircle2, User, ArrowLeft, ClipboardList, Info, X, Minus, Plus, Download, Edit2, Trash2, Eye, EyeOff } from 'lucide-react';
+import { Coffee, Clock, Calendar, Utensils, CheckCircle2, User, ArrowLeft, ClipboardList, Minus, Plus, Download, Edit2, Trash2, Eye, EyeOff } from 'lucide-react';
 
 // --- 1. FIREBASE CONFIGURATION ---
 const isCanvasEnv = typeof __firebase_config !== 'undefined' && !!__firebase_config;
 
 const firebaseConfig = isCanvasEnv 
   ? JSON.parse(__firebase_config) 
-  : {
+    : {
       apiKey: "AIzaSyAzXcwMejGNc7ZH6viupSem_sblk5_8RUg",
       authDomain: "napasai-breakfast.firebaseapp.com",
       projectId: "napasai-breakfast",
@@ -23,33 +23,32 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- Path Resolvers ---
-// Safely resolve paths to prevent SDK segment parity errors and handle Canvas environment limits gracefully
+// --- Path Resolvers (Safe for both Vercel and Preview) ---
 const getOrdersCollection = () => {
-  try {
-    if (isCanvasEnv) {
-      const appId = typeof __app_id !== 'undefined' ? encodeURIComponent(__app_id) : 'default-app-id';
-      return collection(db, 'artifacts', appId, 'public', 'data', 'breakfast_orders');
+  if (isCanvasEnv) {
+    const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default';
+    const segments = ['artifacts', ...rawAppId.split('/'), 'public', 'data', 'breakfast_orders'];
+    if (segments.length % 2 === 0) {
+      segments.push('items');
     }
-  } catch (e) {
-    // Silently fallback if segment calculation fails in preview
+    return collection(db, ...segments);
   }
   return collection(db, 'breakfast_orders'); 
 };
 
 const getMenuConfigDoc = () => {
-  try {
-    if (isCanvasEnv) {
-      const appId = typeof __app_id !== 'undefined' ? encodeURIComponent(__app_id) : 'default-app-id';
-      return doc(db, 'artifacts', appId, 'public', 'data', 'menu_config', 'main_menu');
+  if (isCanvasEnv) {
+    const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'default';
+    const segments = ['artifacts', ...rawAppId.split('/'), 'public', 'data', 'menu_config', 'main_menu'];
+    if (segments.length % 2 !== 0) {
+      segments.push('doc');
     }
-  } catch (e) {
-    // Silently fallback if segment calculation fails in preview
+    return doc(db, ...segments);
   }
   return doc(db, 'menu_config', 'main_menu'); 
 };
 
-// --- Html2Canvas Helper ---
+// --- Html2Canvas Helper (For Exporting Report) ---
 const loadHtml2Canvas = () => {
   return new Promise((resolve, reject) => {
     if (window.html2canvas) {
@@ -70,7 +69,7 @@ const FIXED_ROOMS = [
   "301", "302", "303", "304", "306", "307", "308", "309", "310", "311", "312", "313"
 ];
 
-// --- Default Menu Structure ---
+// --- Default Menu Structure (Matches the physical paper form) ---
 const DEFAULT_MENU_CATEGORIES = [
   {
     title: "Seasonal fresh fruit juice",
@@ -93,7 +92,7 @@ const DEFAULT_MENU_CATEGORIES = [
   {
     title: "Seasonal sliced fruit",
     items: [
-      { name: "Passion Fruit", outOfStock: false },
+      { name: "Pasion Fruit", outOfStock: false },
       { name: "Mango", outOfStock: false },
       { name: "Papaya", outOfStock: false },
       { name: "Watermelon", outOfStock: false },
@@ -106,9 +105,7 @@ const DEFAULT_MENU_CATEGORIES = [
       { name: "Poached Eggs", outOfStock: false },
       { name: "Scrambled Eggs", outOfStock: false },
       { name: "Boiled egg", outOfStock: false, isBoiledEgg: true },
-      { name: "Fried Eggs - Sunny Side Up", outOfStock: false },
-      { name: "Fried Eggs - Over Easy", outOfStock: false },
-      { name: "Fried Eggs - Over Medium", outOfStock: false },
+      { name: "Fried Eggs (Sunny Side Up / Over Easy / Over Medium)", outOfStock: false },
       { name: "Omelette", outOfStock: false },
       { name: "Add-on: Onion", outOfStock: false, indent: true },
       { name: "Add-on: Tomato", outOfStock: false, indent: true },
@@ -150,7 +147,7 @@ const DEFAULT_MENU_CATEGORIES = [
       { name: "Vegetable fried rice", outOfStock: false },
       { name: "Stir-fried mixed vegetables", outOfStock: false },
       { name: "Stir-fried noodles with soy sauce", outOfStock: false },
-      { name: "Mix Dim Sum (Sweet Cream, Prawns Shumai, Pork BBQ)", outOfStock: false }
+      { name: "Mix Dim Sum ((Sweet Cream, Prawns Shumai, Pork BBQ)", outOfStock: false }
     ]
   },
   {
@@ -216,31 +213,23 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
-    let unsubscribe = () => {};
-    try {
-      const menuDocRef = getMenuConfigDoc();
-      
-      unsubscribe = onSnapshot(menuDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-          setMenuCategories(docSnap.data().categories || []);
-        } else {
-          setDoc(menuDocRef, { categories: DEFAULT_MENU_CATEGORIES })
-            .then(() => setMenuCategories(DEFAULT_MENU_CATEGORIES))
-            .catch((err) => {
-              if (err.code !== 'permission-denied') console.error("Error seeding menu:", err);
-              setMenuCategories(DEFAULT_MENU_CATEGORIES);
-            });
-        }
-      }, (error) => {
-        // Suppress permission-denied errors in preview environment to prevent confusing logs
-        if (error.code !== 'permission-denied') {
-          console.error("Error reading menu:", error);
-        }
-        setMenuCategories(DEFAULT_MENU_CATEGORIES);
-      });
-    } catch (e) {
+    const menuDocRef = getMenuConfigDoc();
+    
+    const unsubscribe = onSnapshot(menuDocRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setMenuCategories(docSnap.data().categories || []);
+      } else {
+        setDoc(menuDocRef, { categories: DEFAULT_MENU_CATEGORIES })
+          .then(() => setMenuCategories(DEFAULT_MENU_CATEGORIES))
+          .catch((err) => {
+            console.error("Error seeding menu:", err);
+            setMenuCategories(DEFAULT_MENU_CATEGORIES);
+          });
+      }
+    }, (error) => {
+      console.error("Error reading menu:", error);
       setMenuCategories(DEFAULT_MENU_CATEGORIES);
-    }
+    });
 
     return () => unsubscribe();
   }, [user]);
@@ -374,13 +363,7 @@ function GuestPortal({ user, menuCategories }) {
           const mins = boiledEggMin ? boiledEggMin : '___';
           orderedItems.push(`${qty}x Boiled egg (for ${mins} minute)`);
         } else {
-          if (categoryTitle === "Seasonal fresh fruit juice") {
-            orderedItems.push(`${qty}x ${itemName} (Juice)`);
-          } else if (categoryTitle === "Seasonal sliced fruit") {
-            orderedItems.push(`${qty}x ${itemName} (Sliced fruit)`);
-          } else {
-            orderedItems.push(`${qty}x ${itemName}`);
-          }
+          orderedItems.push(`${qty}x ${itemName}`);
         }
       }
     });
@@ -397,12 +380,8 @@ function GuestPortal({ user, menuCategories }) {
       await addDoc(ordersRef, orderPayload);
       setIsSuccess(true);
     } catch (error) {
-      if (error.code === 'permission-denied') {
-        alert("Preview Limitation: Orders cannot be submitted here. Please test this on your deployed Vercel site.");
-      } else {
-        console.error("Error submitting order:", error);
-        alert("Failed to submit order. Please try again.");
-      }
+      console.error("Error submitting order:", error);
+      alert("Failed to submit order. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -497,7 +476,7 @@ function GuestPortal({ user, menuCategories }) {
                   onChange={(e) => setBoiledEggMin(e.target.value)}
                   onClick={(e) => e.preventDefault()}
                 /> 
-                minute(s))
+                minute)
               </span>
             ) : (
               itemName
@@ -664,26 +643,19 @@ function StaffDashboard({ user, menuCategories }) {
   useEffect(() => {
     if (!user) return;
     
-    let unsubscribe = () => {};
-    try {
-      const ordersRef = getOrdersCollection();
-      
-      unsubscribe = onSnapshot(ordersRef, (snapshot) => {
-        const fetchedOrders = [];
-        snapshot.forEach(doc => {
-          fetchedOrders.push({ id: doc.id, ...doc.data() });
-        });
-        setOrders(fetchedOrders);
-        setOrdersLoading(false);
-      }, (error) => {
-        if (error.code !== 'permission-denied') {
-          console.error("Error loading orders:", error);
-        }
-        setOrdersLoading(false);
+    const ordersRef = getOrdersCollection();
+    
+    const unsubscribe = onSnapshot(ordersRef, (snapshot) => {
+      const fetchedOrders = [];
+      snapshot.forEach(doc => {
+        fetchedOrders.push({ id: doc.id, ...doc.data() });
       });
-    } catch (e) {
+      setOrders(fetchedOrders);
       setOrdersLoading(false);
-    }
+    }, (error) => {
+      console.error("Error loading orders:", error);
+      setOrdersLoading(false);
+    });
 
     return () => unsubscribe();
   }, [user]);
@@ -860,12 +832,8 @@ function ManageMenuPanel({ menuCategories }) {
       setSuccessMsg("Menu changes saved successfully!");
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (error) {
-      if (error.code === 'permission-denied') {
-        alert("Preview Limitation: Menu changes cannot be saved here. Please test this on your deployed Vercel site.");
-      } else {
-        console.error("Error saving menu configuration:", error);
-        alert("Failed to save menu changes. Please try again.");
-      }
+      console.error("Error saving menu configuration:", error);
+      alert("Failed to save menu changes. Please try again.");
     } finally {
       setIsSaving(false);
     }
@@ -930,12 +898,8 @@ function ManageMenuPanel({ menuCategories }) {
       setSuccessMsg("Successfully reset to default menu!");
       setTimeout(() => setSuccessMsg(""), 3000);
     } catch (error) {
-      if (error.code === 'permission-denied') {
-        alert("Preview Limitation: Menu cannot be reset here. Please test this on your deployed Vercel site.");
-      } else {
-        console.error(error);
-        alert("Failed to reset menu.");
-      }
+      console.error(error);
+      alert("Failed to reset menu.");
     } finally {
       setIsSaving(false);
     }
