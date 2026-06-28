@@ -214,4 +214,4 @@ function GuestPortal({ user, menuCategories }) {
     );
   };
 
-  if (isSuccess) return <div className="max-w-2xl mx-auto mt-12 px-6 text-center bg-white p-12 rounded-2xl shadow-sm"><CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-6" /><h2 className="text-3xl font-serif mb-4">Order Received!</h2><button onClick={() => { setIsSuccess(false); setQuantities({}); setFormData(prev=>({...prev, roomNo:'', guestName:''})); }} className="px-6 py-3 bg-slate-900 text-white
+  if (isSuccess) return <div className="max-w-2xl mx-auto mt-12 px-6 text-center bg-white p-12 rounded-2xl shadow-sm"><CheckCircle2 className="h-16 w-16 text-green-500 mx-auto mb-6" /><h2 className="text-3xl font-serif mb-4">Order Received!</h2><button onClick={() => { setIsSuccess(false); setQuantities({}); setFormData(prev=>({...prev, roomNo:'', guestName:''})); }} className="px-6 py-3 bg-slate-900 text-white 
